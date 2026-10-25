@@ -28,3 +28,6 @@ export const FIELDS: Field[] = [
   { name: 'salary_currency', type: 'text', categorical: true, description: 'GBP, USD or ILS' },
   { name: 'salary_period', type: 'text', categorical: true, description: 'yearly, monthly or hourly' },
 ];
+
+export const FIELD_BY_NAME = new Map(FIELDS.map((f) => [f.name, f]));
+export const FIELD_NAMES = FIELDS.map((f) => f.name) as [string, ...string[]];

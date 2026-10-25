@@ -1,6 +1,7 @@
 import type { DatabaseSync } from 'node:sqlite';
 import type { McpServer } from '@modelcontextprotocol/server';
 import { FIELDS } from './fields.ts';
+import { QueryInput, runQuery } from './query.ts';
 
 const MAX_DISTINCT = 25;
 
@@ -44,5 +45,21 @@ export function registerTools(server: McpServer, db: DatabaseSync) {
         'Describes the company people directory: every queryable field with its type, meaning, and (for categorical fields) the possible values with counts. Call this first when unsure how a term in the question maps to the data.',
     },
     async () => ({ content: [{ type: 'text', text: JSON.stringify(describePeopleData(db), null, 2) }] }),
+  );
+
+  server.registerTool(
+    'query_people',
+    {
+      description:
+        'Query the people directory. Row mode (no aggregate): returns matching people, sorted and limited. Aggregate mode: count/avg/min/max of a field, optionally per group_by. Filters are AND-ed. Salary aggregates are automatically split by currency and period. Use describe_people_data first if unsure of field names or values.',
+      inputSchema: QueryInput,
+    },
+    async (args) => {
+      try {
+        return { content: [{ type: 'text', text: JSON.stringify(runQuery(db, args), null, 2) }] };
+      } catch (err) {
+        return { isError: true, content: [{ type: 'text', text: err instanceof Error ? err.message : String(err) }] };
+      }
+    },
   );
 }
