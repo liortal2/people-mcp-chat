@@ -13,7 +13,7 @@ export const QueryInput = z.object({
         field: z.enum(FIELD_NAMES),
         op: z.enum(['eq', 'contains', 'gt', 'lt']).describe('eq: equals (text is case-insensitive). contains: text substring. gt/lt: numbers and dates only'),
         value: z.union([z.string(), z.number()]).describe('Dates as DD/MM/YYYY'),
-      }),
+      }).strict(),
     )
     .default([])
     .describe('Conditions, all must match (AND)'),
@@ -22,12 +22,14 @@ export const QueryInput = z.object({
       fn: z.enum(['count', 'avg', 'min', 'max']),
       field: z.enum(FIELD_NAMES).optional().describe('Required for avg/min/max. avg needs a number field. Omit for count'),
     })
+    .strict()
     .optional()
     .describe('Return one computed value instead of rows'),
   group_by: z.enum(FIELD_NAMES).optional().describe('With aggregate: one value per group (categorical fields only). Without aggregate, counts per group'),
-  sort: z.object({ field: z.enum(FIELD_NAMES), direction: z.enum(['asc', 'desc']).default('asc') }).optional().describe('Row mode only'),
+  sort: z.object({ field: z.enum(FIELD_NAMES), direction: z.enum(['asc', 'desc']).default('asc') }).strict().optional().describe('Row mode only'),
   limit: z.number().int().min(1).max(MAX_LIMIT).default(20).describe('Row mode only'),
-});
+// Strict: a misplaced key (e.g. `fn` outside `aggregate`) is an error, not silently dropped into a different query.
+}).strict();
 export type QueryInputT = z.infer<typeof QueryInput>;
 
 export interface CompiledQuery {

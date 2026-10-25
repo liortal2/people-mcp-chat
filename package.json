@@ -10,9 +10,11 @@
     "ingest": "node src/ingest.ts",
     "test": "node --test \"test/**/*.test.ts\"",
     "typecheck": "tsc --noEmit",
-    "mcp": "node src/mcp/server.ts"
+    "mcp": "node src/mcp/server.ts",
+    "chat": "node --env-file=.env src/chat/server.ts"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^1.3.0",
     "@modelcontextprotocol/client": "^2.4.0",
     "@modelcontextprotocol/express": "^2.0.2",
     "@modelcontextprotocol/node": "^2.1.2",

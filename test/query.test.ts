@@ -32,6 +32,12 @@ test('unknown field is rejected', () => {
   assert.throws(() => parse({ group_by: 'password' }));
 });
 
+test('unknown keys are rejected instead of silently dropped', () => {
+  assert.throws(() => parse({ fn: 'count', filters: [] }), /fn/);
+  assert.throws(() => parse({ aggregate: { fn: 'count', fied: 'age' } }));
+  assert.throws(() => parse({ filters: [{ field: 'city', op: 'eq', value: 'x', extra: 1 }] }));
+});
+
 test('avg on a text field is rejected with a clear error', () => {
   assert.throws(() => compileQuery(parse({ aggregate: { fn: 'avg', field: 'team' } })), /avg needs a number field/);
 });
