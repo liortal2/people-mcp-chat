@@ -8,7 +8,7 @@ const MAX_DISTINCT = 25;
 const NOTES = [
   'Dates are shown as DD/MM/YYYY.',
   'city, country and office are one-to-one: London / United Kingdom / "London HQ & Flagship", etc. "Place" can mean any of them.',
-  'One record has work_status "pending_arrival": a hire who has not started, with most fields empty.',
+  'work_status "pending_arrival" means hired but not started yet. These records have most fields empty.',
   'Salaries are in mixed currencies and periods (yearly, monthly, hourly). Never add or average across currencies.',
 ];
 
@@ -44,7 +44,7 @@ export function registerTools(server: McpServer, db: DatabaseSync) {
       description:
         'Describes the company people directory: every queryable field with its type, meaning, and (for categorical fields) the possible values with counts. Call this first when unsure how a term in the question maps to the data.',
     },
-    async () => ({ content: [{ type: 'text', text: JSON.stringify(describePeopleData(db), null, 2) }] }),
+    async () => ({ content: [{ type: 'text', text: JSON.stringify(describePeopleData(db)) }] }),
   );
 
   server.registerTool(
@@ -56,7 +56,7 @@ export function registerTools(server: McpServer, db: DatabaseSync) {
     },
     async (args) => {
       try {
-        return { content: [{ type: 'text', text: JSON.stringify(runQuery(db, args), null, 2) }] };
+        return { content: [{ type: 'text', text: JSON.stringify(runQuery(db, args)) }] };
       } catch (err) {
         return { isError: true, content: [{ type: 'text', text: err instanceof Error ? err.message : String(err) }] };
       }
