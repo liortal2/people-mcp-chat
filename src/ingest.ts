@@ -89,32 +89,36 @@ export function ingest(db: DatabaseSync, csvText: string): IngestResult {
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
 
     for (const r of records) {
-      const missing = ['Job', 'Team', 'Start Date', 'Date of Birth', 'Salary Amount'].filter(
-        (k) => emptyToNull(r[k] ?? '') === null,
-      );
+      const text = (col: string) => emptyToNull(r[col] ?? '');
+      // Empty -> NULL, invalid -> stop the whole ingest (corrupt data, not just missing).
+      const date = (col: string) => {
+        const raw = text(col);
+        if (raw === null) return null;
+        const iso = parseDmy(raw);
+        if (!iso) throw new Error(`${r['Full Name']}: bad ${col} "${raw}"`);
+        return iso;
+      };
+
+      const missing = ['Job', 'Team', 'Start Date', 'Date of Birth', 'Salary Amount'].filter((col) => text(col) === null);
       if (missing.length) warnings.push(`${r['Full Name']}: missing fields (${missing.join(', ')})`);
 
-      for (const [col, raw] of [['Start Date', r['Start Date']], ['Date of Birth', r['Date of Birth']]] as const) {
-        if (raw?.trim() && parseDmy(raw) === null) throw new Error(`${r['Full Name']}: bad ${col} "${raw}"`);
-      }
-
-      const amount = emptyToNull(r['Salary Amount'] ?? '');
+      const amount = text('Salary Amount');
       insert.run(
         r['Full Name'],
-        emptyToNull(r['First Name'] ?? ''),
-        emptyToNull(r['Last Name'] ?? ''),
+        text('First Name'),
+        text('Last Name'),
         r['Work Email'],
         r['Work Status'],
-        emptyToNull(r['Job'] ?? ''),
-        emptyToNull(r['Team'] ?? ''),
-        emptyToNull(r['Reports To'] ?? ''),
-        emptyToNull(r['Office'] ?? ''),
-        emptyToNull(r['City'] ?? ''),
-        emptyToNull(r['Country'] ?? ''),
-        parseDmy(r['Start Date'] ?? ''),
-        parseDmy(r['Date of Birth'] ?? ''),
-        emptyToNull(r['Gender'] ?? ''),
-        emptyToNull(r['Contract Type'] ?? ''),
+        text('Job'),
+        text('Team'),
+        text('Reports To'),
+        text('Office'),
+        text('City'),
+        text('Country'),
+        date('Start Date'),
+        date('Date of Birth'),
+        text('Gender'),
+        text('Contract Type'),
         amount === null ? null : Number(amount),
         normalizeCurrency(r['Salary Currency'] ?? ''),
         normalizePeriod(r['Salary Type'] ?? ''),
