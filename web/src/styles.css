@@ -1,34 +1,29 @@
 :root {
-  --bg: #f6f5f2;
+  --bg: #f7f6f1;
   --surface: #ffffff;
-  --text: #1d1d1b;
-  --muted: #6b6a66;
-  --accent: #8a4b1f;
-  --border: #e2dfd8;
+  --text: #1f1f1d;
+  --muted: #7a7872;
+  --accent: #ffcc2e;
+  --accent-dark: #e8a800;
+  --border: #e8e5dd;
   --error-bg: #fdecea;
   --error-text: #8c1d18;
-  color-scheme: light dark;
-}
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #171614;
-    --surface: #23211e;
-    --text: #efede8;
-    --muted: #9c9a94;
-    --accent: #d99a6c;
-    --border: #36332e;
-    --error-bg: #3a1d1b;
-    --error-text: #f2a8a3;
-  }
+  --content: 728px;
+  color-scheme: light;
 }
 * { box-sizing: border-box; }
-body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.5 system-ui, sans-serif; }
-.app { display: flex; flex-direction: column; height: 100vh; max-width: 760px; margin: 0 auto; padding: 0 16px; }
-header { padding: 16px 0 8px; font-weight: 600; color: var(--accent); }
-main { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; padding: 8px 0; }
+body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.55 Inter, system-ui, sans-serif; }
+.app { display: flex; flex-direction: column; height: 100vh; }
+/* Full-width rows (so the header strip and scrollbar reach the window edges), content centred at --content. */
+.app > * { padding-inline: max(16px, calc((100% - var(--content)) / 2)); }
+header { display: flex; align-items: center; gap: 12px; padding-block: 14px; background: var(--surface); border-bottom: 1px solid var(--border); }
+.logo { display: block; height: 24px; }
+/* line-height 1 so the text box is just the glyphs, and align-items: center centres the words themselves. */
+.title { padding: 3px 0 3px 12px; border-left: 1px solid var(--border); font-weight: 600; line-height: 1; }
+main { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 16px; padding-block: 24px; }
 .hint { color: var(--muted); }
-.bubble { max-width: 90%; padding: 10px 14px; border-radius: 12px; background: var(--surface); border: 1px solid var(--border); overflow-wrap: anywhere; }
-.bubble.user { align-self: flex-end; background: var(--accent); color: #fff; border-color: var(--accent); }
+.bubble { max-width: 85%; padding: 14px 20px; border-radius: 16px; background: var(--surface); border: 1px solid var(--border); box-shadow: 0 1px 3px rgb(0 0 0 / 0.05); overflow-wrap: anywhere; }
+.bubble.user { align-self: flex-end; padding: 8px 16px; border-radius: 14px; background: var(--accent); border-color: var(--accent); font-weight: 500; box-shadow: none; }
 .bubble.error { background: var(--error-bg); color: var(--error-text); border-color: var(--error-text); }
 .bubble.loading { color: var(--muted); }
 .bubble p { margin: 0 0 8px; }
@@ -42,7 +37,8 @@ th, td { border: 1px solid var(--border); padding: 4px 8px; text-align: left; ov
 .call-head span { color: var(--muted); }
 pre { margin: 6px 0 0; padding: 8px; background: var(--bg); border-radius: 6px; overflow-x: auto; font-size: 12px; }
 pre.output { max-height: 220px; overflow-y: auto; }
-form { display: flex; gap: 8px; padding: 12px 0 16px; }
-input { flex: 1; padding: 10px 14px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); color: var(--text); font: inherit; }
-button { padding: 10px 18px; border: 0; border-radius: 10px; background: var(--accent); color: #fff; font: inherit; cursor: pointer; }
+form { display: flex; gap: 10px; padding-block: 12px 24px; }
+input { flex: 1; padding: 12px 16px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); color: var(--text); font: inherit; }
+input:focus { outline: none; border-color: var(--accent-dark); box-shadow: 0 0 0 3px rgb(255 204 46 / 0.3); }
+button { padding: 12px 24px; border: 0; border-radius: 12px; background: var(--accent); color: var(--text); font: inherit; font-weight: 600; cursor: pointer; }
 button:disabled { opacity: 0.5; cursor: default; }
