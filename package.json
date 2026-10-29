@@ -9,6 +9,7 @@
   "scripts": {
     "ingest": "node src/ingest.ts",
     "test": "node --test \"test/**/*.test.ts\"",
+    "eval": "node --env-file=.env eval/run.ts",
     "typecheck": "tsc --noEmit && tsc --noEmit -p web",
     "mcp": "node src/mcp/server.ts",
     "chat": "node --env-file=.env src/chat/server.ts",
