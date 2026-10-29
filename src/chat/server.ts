@@ -10,7 +10,7 @@ const Body = z.object({
   messages: z
     .array(z.object({ role: z.enum(['user', 'assistant']), content: z.string().min(1) }))
     .min(1)
-    .refine((m) => m[m.length - 1].role === 'user', 'The last message must be from the user'),
+    .refine((m) => m.at(-1)?.role === 'user', 'The last message must be from the user'),
 });
 
 const app = express();
