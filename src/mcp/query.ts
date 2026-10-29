@@ -31,10 +31,13 @@ export const QueryInput = z.object({
 // Strict: a misplaced key (e.g. `fn` outside `aggregate`) is an error, not silently dropped into a different query.
 }).strict();
 export type QueryInputT = z.infer<typeof QueryInput>;
+type Filter = QueryInputT['filters'][number];
+type Aggregate = NonNullable<QueryInputT['aggregate']>;
+type Params = (string | number)[];
 
 export interface CompiledQuery {
   sql: string;
-  params: (string | number)[];
+  params: Params;
   mode: 'rows' | 'aggregate';
   limit: number;
   notes: string[];
@@ -49,19 +52,28 @@ function field(name: string): Field {
 // Dates are stored as ISO, shown as DD/MM/YYYY.
 const display = (f: Field) => (f.type === 'date' ? `strftime('%d/%m/%Y', p.${f.name})` : `p.${f.name}`);
 
-function compileFilter(f: { field: string; op: string; value: string | number }, params: (string | number)[]): string {
+const whereSql = (where: string[]) => (where.length ? ` WHERE ${where.join(' AND ')}` : '');
+
+// One filter -> one SQL condition. The value is pushed to params; the SQL only gets a `?`.
+function compileFilter(f: Filter, params: Params): string {
   const def = field(f.field);
-  const col = `p.${def.name}`;
-  if (def.type === 'text') {
-    if (f.op === 'gt' || f.op === 'lt') throw new Error(`Operator "${f.op}" does not apply to text field "${def.name}". Use eq or contains.`);
-    const text = String(f.value);
-    if (f.op === 'eq') {
-      params.push(text);
-      return `${col} = ? COLLATE NOCASE`;
-    }
-    params.push(`%${text.replace(/[\\%_]/g, '\\$&')}%`);
-    return `${col} LIKE ? ESCAPE '\\'`;
+  return def.type === 'text' ? textCondition(def, f, params) : comparisonCondition(def, f, params);
+}
+
+// eq is case-insensitive; contains is a substring match with the LIKE wildcards % and _ escaped.
+function textCondition(def: Field, f: Filter, params: Params): string {
+  if (f.op === 'gt' || f.op === 'lt') throw new Error(`Operator "${f.op}" does not apply to text field "${def.name}". Use eq or contains.`);
+  const text = String(f.value);
+  if (f.op === 'eq') {
+    params.push(text);
+    return `p.${def.name} = ? COLLATE NOCASE`;
   }
+  params.push(`%${text.replace(/[\\%_]/g, '\\$&')}%`);
+  return `p.${def.name} LIKE ? ESCAPE '\\'`;
+}
+
+// Numbers and dates: =, > or <. Dates come in as DD/MM/YYYY and are compared as ISO.
+function comparisonCondition(def: Field, f: Filter, params: Params): string {
   if (f.op === 'contains') throw new Error(`Operator "contains" only applies to text fields, "${def.name}" is ${def.type}.`);
   const sqlOp = { eq: '=', gt: '>', lt: '<' }[f.op];
   if (def.type === 'number') {
@@ -73,63 +85,67 @@ function compileFilter(f: { field: string; op: string; value: string | number },
     if (!iso) throw new Error(`Field "${def.name}" needs a date as DD/MM/YYYY, got "${f.value}".`);
     params.push(iso);
   }
-  return `${col} ${sqlOp} ?`;
+  return `p.${def.name} ${sqlOp} ?`;
 }
 
 // Pure: validated input in, parameterised SQL out. Field names come only from the allowlist, values only as params.
 export function compileQuery(input: QueryInputT): CompiledQuery {
-  const params: (string | number)[] = [];
-  const notes: string[] = [];
+  const params: Params = [];
   const where = input.filters.map((f) => compileFilter(f, params));
+  // group_by without an aggregate means "count per group".
+  const aggregate = input.aggregate ?? (input.group_by ? { fn: 'count' as const } : undefined);
+  return aggregate ? compileAggregate(input, aggregate, where, params) : compileRows(input, where, params);
+}
 
-  let aggregate = input.aggregate;
-  if (input.group_by && !aggregate) aggregate = { fn: 'count' };
+// Row mode: the allowlisted columns of the matching people.
+function compileRows(input: QueryInputT, where: string[], params: Params): CompiledQuery {
+  const cols = FIELDS.map((f) => `${display(f)} AS ${f.name}`).join(', ');
+  const sort = input.sort ? `p.${field(input.sort.field).name} ${input.sort.direction === 'desc' ? 'DESC' : 'ASC'}, ` : '';
+  const sql = `SELECT ${cols} FROM people_v p` + whereSql(where) + ` ORDER BY ${sort}p.full_name LIMIT ?`;
+  // One extra row tells us whether the result was truncated.
+  return { sql, params: [...params, input.limit + 1], mode: 'rows', limit: input.limit, notes: [] };
+}
 
-  if (!aggregate) {
-    const cols = FIELDS.map((f) => `${display(f)} AS ${f.name}`).join(', ');
-    const sort = input.sort ? `p.${field(input.sort.field).name} ${input.sort.direction === 'desc' ? 'DESC' : 'ASC'}, ` : '';
-    const sql =
-      `SELECT ${cols} FROM people_v p` +
-      (where.length ? ` WHERE ${where.join(' AND ')}` : '') +
-      ` ORDER BY ${sort}p.full_name LIMIT ?`;
-    // One extra row tells us whether the result was truncated.
-    return { sql, params: [...params, input.limit + 1], mode: 'rows', limit: input.limit, notes };
-  }
-
-  const { fn } = aggregate;
+// Aggregate mode: one computed value, or one per group.
+function compileAggregate(input: QueryInputT, aggregate: Aggregate, where: string[], params: Params): CompiledQuery {
   const target = aggregate.field ? field(aggregate.field) : undefined;
-  let aggExpr: string;
-  if (fn === 'count') {
-    aggExpr = target ? `COUNT(p.${target.name})` : 'COUNT(*)';
-  } else {
-    if (!target) throw new Error(`Aggregate "${fn}" needs a field.`);
-    if (fn === 'avg' && target.type !== 'number') throw new Error(`Cannot compute avg of ${target.type} field "${target.name}". avg needs a number field.`);
-    if (target.type === 'text') throw new Error(`Cannot compute ${fn} of text field "${target.name}". Use a number or date field.`);
-    aggExpr = fn === 'avg' ? `ROUND(AVG(p.${target.name}), 2)` : `${fn.toUpperCase()}(p.${target.name})`;
-  }
+  const aggExpr = aggregateExpr(aggregate.fn, target);
   // Groups are ordered by aggExpr (ISO for dates, so chronological); only the shown value is DD/MM/YYYY.
-  const valueExpr = fn !== 'count' && target?.type === 'date' ? `strftime('%d/%m/%Y', ${aggExpr})` : aggExpr;
+  const valueExpr = aggregate.fn !== 'count' && target?.type === 'date' ? `strftime('%d/%m/%Y', ${aggExpr})` : aggExpr;
 
-  const groups: Field[] = [];
-  if (input.group_by) {
-    const g = field(input.group_by);
-    if (!g.categorical) throw new Error(`Cannot group by "${g.name}". Group by one of: ${FIELDS.filter((f) => f.categorical).map((f) => f.name).join(', ')}.`);
-    groups.push(g);
-  }
+  const groups = input.group_by ? [groupField(input.group_by)] : [];
+  const conditions = [...where];
+  const notes: string[] = [];
   // Amounts in different currencies/periods must never be mixed in one number.
-  if (target?.name === 'salary_amount' && fn !== 'count') {
+  if (target?.name === 'salary_amount' && aggregate.fn !== 'count') {
     for (const name of ['salary_currency', 'salary_period']) if (!groups.some((g) => g.name === name)) groups.push(field(name));
-    where.push('p.salary_amount IS NOT NULL');
+    conditions.push('p.salary_amount IS NOT NULL');
     notes.push('salary_amount is grouped by salary_currency and salary_period: amounts in different currencies or periods are not comparable.');
   }
 
   const select = [...groups.map((g) => `p.${g.name} AS ${g.name}`), `${valueExpr} AS value`].join(', ');
   const sql =
     `SELECT ${select} FROM people_v p` +
-    (where.length ? ` WHERE ${where.join(' AND ')}` : '') +
+    whereSql(conditions) +
     (groups.length ? ` GROUP BY ${groups.map((g) => `p.${g.name}`).join(', ')} ORDER BY ${aggExpr} DESC, 1` : '') +
     ` LIMIT ?`;
   return { sql, params: [...params, MAX_GROUPS], mode: 'aggregate', limit: MAX_GROUPS, notes };
+}
+
+// The SQL for count/avg/min/max, after checking that the function suits the field's type.
+function aggregateExpr(fn: Aggregate['fn'], target: Field | undefined): string {
+  if (fn === 'count') return target ? `COUNT(p.${target.name})` : 'COUNT(*)';
+  if (!target) throw new Error(`Aggregate "${fn}" needs a field.`);
+  if (fn === 'avg' && target.type !== 'number') throw new Error(`Cannot compute avg of ${target.type} field "${target.name}". avg needs a number field.`);
+  if (target.type === 'text') throw new Error(`Cannot compute ${fn} of text field "${target.name}". Use a number or date field.`);
+  return fn === 'avg' ? `ROUND(AVG(p.${target.name}), 2)` : `${fn.toUpperCase()}(p.${target.name})`;
+}
+
+// Only categorical fields can be grouped: grouping by e.g. full_name would give one group per person.
+function groupField(name: string): Field {
+  const g = field(name);
+  if (!g.categorical) throw new Error(`Cannot group by "${g.name}". Group by one of: ${FIELDS.filter((f) => f.categorical).map((f) => f.name).join(', ')}.`);
+  return g;
 }
 
 export function runQuery(db: DatabaseSync, input: QueryInputT) {
