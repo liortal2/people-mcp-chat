@@ -98,18 +98,17 @@ export function compileQuery(input: QueryInputT): CompiledQuery {
 
   const { fn } = aggregate;
   const target = aggregate.field ? field(aggregate.field) : undefined;
-  let valueExpr: string;
+  let aggExpr: string;
   if (fn === 'count') {
-    valueExpr = target ? `COUNT(p.${target.name})` : 'COUNT(*)';
+    aggExpr = target ? `COUNT(p.${target.name})` : 'COUNT(*)';
   } else {
     if (!target) throw new Error(`Aggregate "${fn}" needs a field.`);
     if (fn === 'avg' && target.type !== 'number') throw new Error(`Cannot compute avg of ${target.type} field "${target.name}". avg needs a number field.`);
     if (target.type === 'text') throw new Error(`Cannot compute ${fn} of text field "${target.name}". Use a number or date field.`);
-    valueExpr =
-      fn === 'avg' ? `ROUND(AVG(p.${target.name}), 2)`
-      : target.type === 'date' ? `strftime('%d/%m/%Y', ${fn.toUpperCase()}(p.${target.name}))`
-      : `${fn.toUpperCase()}(p.${target.name})`;
+    aggExpr = fn === 'avg' ? `ROUND(AVG(p.${target.name}), 2)` : `${fn.toUpperCase()}(p.${target.name})`;
   }
+  // Groups are ordered by aggExpr (ISO for dates, so chronological); only the shown value is DD/MM/YYYY.
+  const valueExpr = fn !== 'count' && target?.type === 'date' ? `strftime('%d/%m/%Y', ${aggExpr})` : aggExpr;
 
   const groups: Field[] = [];
   if (input.group_by) {
@@ -128,7 +127,7 @@ export function compileQuery(input: QueryInputT): CompiledQuery {
   const sql =
     `SELECT ${select} FROM people_v p` +
     (where.length ? ` WHERE ${where.join(' AND ')}` : '') +
-    (groups.length ? ` GROUP BY ${groups.map((g) => `p.${g.name}`).join(', ')} ORDER BY value DESC, 1` : '') +
+    (groups.length ? ` GROUP BY ${groups.map((g) => `p.${g.name}`).join(', ')} ORDER BY ${aggExpr} DESC, 1` : '') +
     ` LIMIT ?`;
   return { sql, params: [...params, MAX_GROUPS], mode: 'aggregate', limit: MAX_GROUPS, notes };
 }

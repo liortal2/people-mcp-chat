@@ -88,6 +88,11 @@ test('date filters take DD/MM/YYYY and dates are returned as DD/MM/YYYY', () => 
   assert.throws(() => compileQuery(parse({ filters: [{ field: 'start_date', op: 'lt', value: '2018-01-01' }] })), /DD\/MM\/YYYY/);
 });
 
+test('date aggregate groups are ordered by date, not by DD/MM text', () => {
+  const rows = run({ aggregate: { fn: 'min', field: 'start_date' }, group_by: 'office' }).rows;
+  assert.deepEqual(rows.slice(0, 3).map((r) => r.value), ['05/05/2023', '09/11/2019', '04/09/2017']);
+});
+
 test('min of a date field is formatted DD/MM/YYYY', () => {
   assert.equal(run({ aggregate: { fn: 'min', field: 'start_date' } }).rows[0].value, '04/09/2017');
 });
